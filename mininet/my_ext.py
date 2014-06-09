@@ -2,9 +2,10 @@ import random
 from threading import Timer
 from time import sleep, ctime, time
 
-results = []
+all_results = []
+last_res = '' #result of last genTraffic standalone run
 
-def genTraffic(hosts, parsePingOutput, gap=0.01, timeout=1, count=3, file_name = None):
+def genTraffic(hosts, parsePing, gap=0.01, timeout=1, count=3, file_name = None):
     "pings 2 random hosts every gap s until timeout. if gap is 0, pump out as much traffic as possible in that timeout. if timeout is 0, never stop pumping"
     num_pings = 0
     num_op = 0
@@ -15,7 +16,7 @@ def genTraffic(hosts, parsePingOutput, gap=0.01, timeout=1, count=3, file_name =
     current_op = ['' for i in range(num_hosts)]
     indices = range(num_hosts)
     cont = [True]
-    isGap = gap!=0
+    is_gap = gap != 0
     random.seed()
     p = False
     if file_name == '.':
@@ -46,7 +47,7 @@ def genTraffic(hosts, parsePingOutput, gap=0.01, timeout=1, count=3, file_name =
             current_op[i] += op
             if not nodes[0].waiting:
                 num_op += 1
-                op_tuple = parsePingOutput(current_op[i])
+                op_tuple = parsePing(current_op[i])
                 sent, received, rttmin, rttavg, rttmax, rttdev = op_tuple
                 pkts_sent += sent
                 pkts_recvd += received
@@ -87,7 +88,7 @@ def genTraffic(hosts, parsePingOutput, gap=0.01, timeout=1, count=3, file_name =
                 if pkts_commited >= pkts_to_send:
                     cont[0] = False
         num_pings += 1
-        if isGap:
+        if is_gap:
             sleep(gap)
     #here traverse through all the hosts once and get the ops. 
     for i in indices:
@@ -95,7 +96,7 @@ def genTraffic(hosts, parsePingOutput, gap=0.01, timeout=1, count=3, file_name =
         if host.waiting:
             op = current_op[i] + host.waitOutput()#this is a bust wait
             num_op += 1
-            op_tuple = parsePingOutput(op)
+            op_tuple = parsePing(op)
             sent, received, rttmin, rttavg, rttmax, rttdev = op_tuple
             pkts_sent += sent
             pkts_recvd += received
@@ -112,13 +113,47 @@ def genTraffic(hosts, parsePingOutput, gap=0.01, timeout=1, count=3, file_name =
         f.write(s)
     elif p:
         print s
-    if num_op == 0:
-        res = 'No op parsed. Num ping cmds sent : {0}'.format(num_pings)
-    else:
-        res = 'Total ping cmds:{0}, op parsed:{1}, pkts sent:{2}, pkts recvd:{3}, avg rtt:{4}'.format(num_pings, num_op, pkts_sent, pkts_recvd, (rtt_total/num_op) )
-    print res
+    res = 'Total ping cmds:{0}, op parsed:{1}, pkts sent:{2}, pkts recvd:{3}, avg rtt:{4}'.format(num_pings, num_op, pkts_sent, pkts_recvd, (rtt_total/num_op) if num_op else 0 )
+    #print res
     if file_name:
         f.write(res)
     if file_name:
         f.close()
-    return res
+    return ( num_pings, num_op, pkts_sent, pkts_recvd, (rtt_total/num_op) if num_op else 0 )
+
+def genTrafficWrapper(hosts, parsePing, line):
+
+    l = line.split()
+    res = ''
+    if len(l) == 0:
+        res = genTraffic(hosts, parsePing)
+    elif len(l) == 1:#assume its the gap, and timeout is def val
+        res = genTraffic(hosts, parsePing, int(l[0])/1000.0)
+    elif len(l) == 2:#assuming its gap and timeout
+        res = genTraffic(hosts, parsePing, int(l[0])/1000.0, int(l[1])/1000.0)
+    elif len(l) == 3:#interval between ping, duration, count in a ping
+        res = genTraffic(hosts, parsePing, int(l[0])/1000.0, int(l[1])/1000.0, int(l[2]))           
+    elif len(l) == 4:#interval between ping, duration, count in a ping, the filename to put the op into
+        res = genTraffic(hosts, parsePing, int(l[0])/1000.0, int(l[1])/1000.0, int(l[2]), l[3])
+
+    num_pings, num_op, pkts_sent, pkts_recvd, avg_rtt = res
+    res_str = 'Total ping cmds issued:{0}, ping op parsed:{1}, pkts sent:{2}, pkts recvd:{3}, avg rtt:{4}'.format(num_pings, num_op, pkts_sent, pkts_recvd, avg_rtt)
+    return res_str
+
+def genTrafficBatch(hosts, parsePing, _line):
+    l = _line.split()
+    inp = open( l[0], 'r')
+    op = None
+    if len(l) == 2:
+        op = open( l[1], 'w')
+    results = []
+    for line in inp:
+        results.append( genTrafficWrapper( hosts, parsePing, line.strip()) )
+    global all_results #has to be global only coz of do_res. otherwise can be local if recall is not needed
+    all_results.append(results)
+    inp.close()
+    if op: 
+        op.write( '\n'.join( results )[1:] )
+        op.close()
+    #print results
+    return len(results)

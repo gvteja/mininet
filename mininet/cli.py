@@ -37,7 +37,7 @@ import atexit
 from mininet.log import info, output, error
 from mininet.term import makeTerms, runX11
 from mininet.util import quietRun, isShellBuiltin, dumpNodeConnections
-from my_ext import genTraffic, results
+import my_ext
 
 class CLI( Cmd ):
     "Simple command-line interface to talk to nodes."
@@ -398,43 +398,29 @@ class CLI( Cmd ):
         hosts = self.mn.hosts
         parsePing = self.mn._parsePingFull
         #print 'line passed : "{0}"'.format(_line)
-        l = _line.split()
-        res = ''
-        if len(l) == 0:
-            res = genTraffic(hosts, parsePing)
-        elif len(l) == 1:#assume its the gap, and timeout is def val
-            res = genTraffic(hosts, parsePing, int(l[0])/1000.0)
-        elif len(l) == 2:#assuming its gap and timeout
-            res = genTraffic(hosts, parsePing, int(l[0])/1000.0, int(l[1])/1000.0)
-        elif len(l) == 3:#interval between ping, duration, count in a ping
-            res = genTraffic(hosts, parsePing, int(l[0])/1000.0, int(l[1])/1000.0, int(l[2]))           
-        elif len(l) == 4:#interval between ping, duration, count in a ping, the filename to put the op into
-            res = genTraffic(hosts, parsePing, int(l[0])/1000.0, int(l[1])/1000.0, int(l[2]), l[3])
-        global results
-        results.append(res)
+        res = my_ext.genTrafficWrapper(hosts, parsePing, _line.strip()) #maybe dont pass parsePing fn. copy paste it in my_ext and maybe make your own mods
+        print res
+        my_ext.last_res = res
 
     def do_GTBatch( self, _line ):
         'Takes the batch parameters for gentraffic from the file given and stores the results. another file name can be given in which case the summarized results are put in that'
-        l = _line.strip().split()
-        f = open( l[0], 'r')
-        op = None
-        if len(l) == 2:
-            op = open( l[1], 'w')
-        global results
-        results = ['']
-        for line in f:
-            self.do_genTraffic( line.strip())
-        print 'Completed {0} runs of genTraffic'.format(len(results) - 1 )
-        f.close()
-        if op:
-            op.write( '\n'.join( results )[1:] )
-            op.close()
+        hosts = self.mn.hosts
+        parsePing = self.mn._parsePingFull
+        num_runs = my_ext.genTrafficBatch( hosts, parsePing, _line.strip() )
+        print 'Completed {0} runs of genTraffic'.format( num_runs )
     
     def do_res( self, _line ):
         'Returns the nth result from the previously run batch gentraffic'
-        n = int( _line.strip() )
-        global results
-        print results[n]
+        l = _line.strip().split()
+        try:
+            if len(l) == 0: #last res of genTraffic
+                print my_ext.last_res
+            elif len(l) == 1: #res from the last GTBatch 
+                print my_ext.all_results[-1][ int(l[0]) - 1]
+            else: #index for batch run also given
+                print my_ext.all_results[ int(l[0]) - 1 ][ int(l[1]) - 1 ]
+        except IndexError:
+            print 'Invalid index'
 
 
 
