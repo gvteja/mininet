@@ -538,7 +538,7 @@ class Mininet( object ):
         if m is None:
             error( '*** Error: could not parse ping output: %s\n' %
                    pingOutput )
-            return errorTuple
+            return (sent, received, 0, 0, 0, 0)
         rttmin = float( m.group( 1 ) )
         rttavg = float( m.group( 2 ) )
         rttmax = float( m.group( 3 ) )

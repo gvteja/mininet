@@ -963,7 +963,12 @@ class OVSSwitch( Switch ):
            failMode: controller loss behavior (secure|open)
            datapath: userspace or kernel mode (kernel|user)
            inband: use in-band control (False)"""
-        Switch.__init__( self, name, **params )
+        if 'dpid' in params:
+            dpid = hex(params.pop('dpid'))[ 2: ] 
+            dpid = '0' * ( self.dpidLen - len( dpid ) ) + dpid 
+            Switch.__init__( self, name, dpid, **params )
+        else:
+            Switch.__init__( self, name, **params )
         self.failMode = failMode
         self.datapath = datapath
         self.inband = inband

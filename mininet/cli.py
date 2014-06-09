@@ -37,6 +37,7 @@ import atexit
 from mininet.log import info, output, error
 from mininet.term import makeTerms, runX11
 from mininet.util import quietRun, isShellBuiltin, dumpNodeConnections
+from my_ext import genTraffic, results
 
 class CLI( Cmd ):
     "Simple command-line interface to talk to nodes."
@@ -392,6 +393,50 @@ class CLI( Cmd ):
                     break
             except KeyboardInterrupt:
                 node.sendInt()
+    def do_genTraffic( self, _line ):
+        "Generate traffic by randomly pinging hosts. 1st arg : gap bw a ping. 2nd arg is timeout"""
+        hosts = self.mn.hosts
+        parsePing = self.mn._parsePingFull
+        #print 'line passed : "{0}"'.format(_line)
+        l = _line.split()
+        res = ''
+        if len(l) == 0:
+            res = genTraffic(hosts, parsePing)
+        elif len(l) == 1:#assume its the gap, and timeout is def val
+            res = genTraffic(hosts, parsePing, int(l[0])/1000.0)
+        elif len(l) == 2:#assuming its gap and timeout
+            res = genTraffic(hosts, parsePing, int(l[0])/1000.0, int(l[1])/1000.0)
+        elif len(l) == 3:#interval between ping, duration, count in a ping
+            res = genTraffic(hosts, parsePing, int(l[0])/1000.0, int(l[1])/1000.0, int(l[2]))           
+        elif len(l) == 4:#interval between ping, duration, count in a ping, the filename to put the op into
+            res = genTraffic(hosts, parsePing, int(l[0])/1000.0, int(l[1])/1000.0, int(l[2]), l[3])
+        global results
+        results.append(res)
+
+    def do_GTBatch( self, _line ):
+        'Takes the batch parameters for gentraffic from the file given and stores the results. another file name can be given in which case the summarized results are put in that'
+        l = _line.strip().split()
+        f = open( l[0], 'r')
+        op = None
+        if len(l) == 2:
+            op = open( l[1], 'w')
+        global results
+        results = ['']
+        for line in f:
+            self.do_genTraffic( line.strip())
+        print 'Completed {0} runs of genTraffic'.format(len(results) - 1 )
+        f.close()
+        if op:
+            op.write( '\n'.join( results )[1:] )
+            op.close()
+    
+    def do_res( self, _line ):
+        'Returns the nth result from the previously run batch gentraffic'
+        n = int( _line.strip() )
+        global results
+        print results[n]
+
+
 
 # Helper functions
 
